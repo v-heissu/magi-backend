@@ -15,6 +15,9 @@ public sealed class MagiSettings
     public const string JwtIssuer = "magi-backend";
     public const string JwtAudience = "magi-frontend";
 
+    /// <summary>Encrypts API keys saved from the settings page. Falls back to JWT_SECRET when unset.</summary>
+    public required string SettingsEncryptionKey { get; init; }
+
     public required string? AdminEmail { get; init; }
     public required string? AdminPassword { get; init; }
 
@@ -56,6 +59,7 @@ public sealed class MagiSettings
             ConnectionString = connectionString,
             JwtSecret = jwtSecret,
             JwtExpirationSeconds = Int("JWT_EXPIRATION", 43200),
+            SettingsEncryptionKey = Optional("SETTINGS_ENCRYPTION_KEY") ?? jwtSecret,
             AdminEmail = Optional("ADMIN_EMAIL"),
             AdminPassword = Optional("ADMIN_PASSWORD"),
             CorsOrigins = (Optional("CORS_ORIGINS") ?? string.Empty)

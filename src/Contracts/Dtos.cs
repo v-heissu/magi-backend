@@ -131,3 +131,28 @@ public static class DtoMapper
         d.RejectCount,
         Utc(d.CreatedAt));
 }
+
+public sealed record ProviderConfigDto(
+    string Core,
+    string Designation,
+    string Aspect,
+    string Provider,
+    string Model,
+    string Effort,
+    IReadOnlyList<string> EffortOptions,
+    bool HasKey,
+    string? KeyHint,
+    string KeySource,
+    string KeyEnvVar,
+    bool EnvHasKey,
+    string EnvModel,
+    string EnvEffort,
+    DateTime? UpdatedAt);
+
+/// <param name="ApiKey">New key; null or empty keeps the current one.</param>
+/// <param name="ClearApiKey">Remove the key saved in the DB and go back to the .env one.</param>
+public sealed record UpdateProviderRequest(string? Model, string? Effort, string? ApiKey, bool? ClearApiKey);
+
+public sealed record ModelOptionDto(string Id, string Label);
+
+public sealed record ModelListDto(IReadOnlyList<ModelOptionDto> Models, bool Live, string? Error);

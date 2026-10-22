@@ -3,49 +3,45 @@ using Anthropic;
 using Anthropic.Exceptions;
 using Anthropic.Models.Beta.Messages;
 using Magi.Api.Configuration;
+using Magi.Api.Models;
+using Magi.Api.Providers;
 
 namespace Magi.Api.Cores;
 
 /// <summary>MELCHIOR-1, backed by Claude through the official Anthropic SDK.</summary>
-public sealed class AnthropicCore : IMagiCore
+public sealed class AnthropicCore(ProviderConfigStore store) : IMagiCore
 {
-    private readonly ProviderSettings _settings;
-    private readonly AnthropicClient? _client;
-
-    public AnthropicCore(MagiSettings settings)
-    {
-        _settings = settings.Anthropic;
-        if (_settings.IsConfigured)
-        {
-            _client = new AnthropicClient { ApiKey = _settings.ApiKey!, BaseUrl = _settings.BaseUrl };
-        }
-    }
+    // Rebuilt only when the key or endpoint changes from the settings page.
+    private (string Key, string BaseUrl, AnthropicClient Client)? _cached;
 
     public CoreDefinition Definition => CoreDefinitions.Melchior;
     public string Provider => "Anthropic";
-    public string Model => _settings.Model;
-    public bool IsConfigured => _client is not null;
+    public string Model => store.Get(CoreId.Melchior).Settings.Model;
+    public bool IsConfigured => store.Get(CoreId.Melchior).Settings.IsConfigured;
 
     public async Task<CoreAnswer> DeliberateAsync(CoreRequest request, CancellationToken ct)
     {
-        if (_client is null)
+        var provider = store.Get(CoreId.Melchior).Settings;
+        if (!provider.IsConfigured)
         {
-            throw new CoreFailureException("ANTHROPIC_API_KEY is not configured");
+            throw new CoreFailureException("Anthropic API key is not configured");
         }
+
+        var client = ClientFor(provider);
 
         var schema = CorePrompts.VoteSchema()
             .ToDictionary(kv => kv.Key, kv => JsonSerializer.SerializeToElement(kv.Value));
 
         var parameters = new MessageCreateParams
         {
-            Model = _settings.Model,
+            Model = provider.Model,
             MaxTokens = 16000,
             System = CorePrompts.BuildSystemPrompt(Definition),
             Messages = [new BetaUserMessageParam { Content = CorePrompts.BuildUserPrompt(request) }],
             // Thinking is always on for current Opus models; effort is the depth control.
             OutputConfig = new BetaOutputConfig
             {
-                Effort = ParseEffort(_settings.Effort),
+                Effort = ParseEffort(provider.Effort),
                 Format = new BetaJsonOutputFormat { Schema = schema },
             },
             // If a safety classifier declines, the API re-runs the request on Anthropic's
@@ -56,7 +52,7 @@ public sealed class AnthropicCore : IMagiCore
 
         try
         {
-            var response = await _client.Beta.Messages.Create(parameters, ct);
+            var response = await client.Beta.Messages.Create(parameters, ct);
 
             if (response.StopReason == "refusal")
             {
@@ -80,7 +76,7 @@ public sealed class AnthropicCore : IMagiCore
         }
         catch (AnthropicNotFoundException ex)
         {
-            throw new CoreFailureException($"Model '{_settings.Model}' not found", ex);
+            throw new CoreFailureException($"Model '{provider.Model}' not found", ex);
         }
         catch (AnthropicUnauthorizedException ex)
         {
@@ -102,6 +98,19 @@ public sealed class AnthropicCore : IMagiCore
         {
             throw new CoreFailureException("Network error while contacting Anthropic", ex);
         }
+    }
+
+    private AnthropicClient ClientFor(ProviderSettings settings)
+    {
+        var cached = _cached;
+        if (cached is { } c && c.Key == settings.ApiKey && c.BaseUrl == settings.BaseUrl)
+        {
+            return c.Client;
+        }
+
+        var client = new AnthropicClient { ApiKey = settings.ApiKey!, BaseUrl = settings.BaseUrl };
+        _cached = (settings.ApiKey!, settings.BaseUrl, client);
+        return client;
     }
 
     private static Effort ParseEffort(string value) => value.ToLowerInvariant() switch

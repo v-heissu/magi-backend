@@ -154,6 +154,36 @@ namespace Magi.Api.src.Data.Migrations
                     b.ToTable("Deliberations");
                 });
 
+            modelBuilder.Entity("Magi.Api.Models.ProviderSetting", b =>
+                {
+                    b.Property<string>("Core")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("ApiKeyCipher")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<string>("ApiKeyHint")
+                        .HasMaxLength(8)
+                        .HasColumnType("varchar(8)");
+
+                    b.Property<string>("Effort")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Core");
+
+                    b.ToTable("ProviderSettings");
+                });
+
             modelBuilder.Entity("Magi.Api.Models.User", b =>
                 {
                     b.Property<Guid>("Id")

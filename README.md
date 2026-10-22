@@ -59,16 +59,25 @@ Le migration vengono applicate in automatico all'avvio.
 | `ASPNETCORE_ENVIRONMENT` | no | `Development` / `Production` |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | sì | Connessione MySQL |
 | `JWT_SECRET` | sì | Chiave HMAC dei token, almeno 32 caratteri (`openssl rand -base64 48`) |
+| `SETTINGS_ENCRYPTION_KEY` | consigliata | Cifra (AES-256-GCM) le chiavi API salvate dalla pagina Impostazioni. Se vuota deriva da `JWT_SECRET`. Se cambia, le chiavi salvate vanno reinserite |
 | `JWT_EXPIRATION` | no (43200) | Durata del token in secondi |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | sì al primo avvio | Account operatore. Non c'è registrazione pubblica: ogni deliberazione consuma credito API. Se cambi la password e riavvii, la password viene aggiornata. Minimo 12 caratteri |
 | `CORS_ORIGINS` | no | Origini CORS separate da virgola. Di norma vuota: il browser non chiama mai il backend direttamente |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_EFFORT` | no | MELCHIOR-1. Effort: `low` / `medium` / `high` / `max` |
-| `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT` | no | BALTHASAR-2. Effort: `low` / `medium` / `high` |
-| `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_THINKING_LEVEL` | no | CASPER-3. Thinking level: `low` / `high` |
+| `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT` | no | BALTHASAR-2. Effort: `low` / `medium` / `high` / `xhigh` / `max` |
+| `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_THINKING_LEVEL` | no | CASPER-3. Thinking level: `low` / `medium` / `high` |
 | `DELIBERATIONS_PER_HOUR` | no (30) | Limite di deliberazioni per utente all'ora |
 | `MAX_CONCURRENT_DELIBERATIONS` | no (3) | Deliberazioni eseguite in parallelo |
 | `CORE_TIMEOUT_SECONDS` | no (240) | Attesa massima per la risposta di una singola unità |
 | `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `GEMINI_BASE_URL` | no | Endpoint alternativi (proxy, mock nei test) |
+
+> **Modelli e chiavi si possono cambiare anche dall'interfaccia** (pagina *Impostazioni*, solo per `ADMIN_EMAIL`).
+> I valori salvati finiscono nella tabella `ProviderSettings` (chiavi cifrate), prevalgono su quelli del `.env`
+> e valgono dalla deliberazione successiva, senza riavvio. Il `.env` resta il valore di base: rimuovendo
+> la chiave salvata si torna a quella del `.env`. Le tendine dei modelli leggono l'elenco aggiornato da
+> `GET /v1/models` di ogni provider; senza chiave mostrano un elenco di riserva (`src/Providers/ProviderCatalog.cs`).
+>
+> API: `GET /api/settings/providers`, `GET /api/settings/providers/{core}/models`, `PUT /api/settings/providers/{core}`.
 
 > Le variabili sono "piatte" (`DB_HOST`, non `Db__Host`) e vengono lette all'avvio. Se manca una variabile obbligatoria il processo si ferma subito con un messaggio esplicito.
 

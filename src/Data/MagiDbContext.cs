@@ -8,6 +8,7 @@ public sealed class MagiDbContext(DbContextOptions<MagiDbContext> options) : DbC
     public DbSet<User> Users => Set<User>();
     public DbSet<Deliberation> Deliberations => Set<Deliberation>();
     public DbSet<CoreVote> CoreVotes => Set<CoreVote>();
+    public DbSet<ProviderSetting> ProviderSettings => Set<ProviderSetting>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -45,6 +46,16 @@ public sealed class MagiDbContext(DbContextOptions<MagiDbContext> options) : DbC
             e.Property(v => v.Error).HasMaxLength(1000);
             e.HasOne(v => v.Deliberation).WithMany(d => d.Votes).HasForeignKey(v => v.DeliberationId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        model.Entity<ProviderSetting>(e =>
+        {
+            e.HasKey(p => p.Core);
+            e.Property(p => p.Core).HasConversion<string>().HasMaxLength(20);
+            e.Property(p => p.ApiKeyCipher).HasMaxLength(2000);
+            e.Property(p => p.ApiKeyHint).HasMaxLength(8);
+            e.Property(p => p.Model).HasMaxLength(100);
+            e.Property(p => p.Effort).HasMaxLength(20);
         });
     }
 }

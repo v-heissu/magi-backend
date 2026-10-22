@@ -4,6 +4,7 @@ using Magi.Api.Cores;
 using Magi.Api.Data;
 using Magi.Api.Deliberations;
 using Magi.Api.Endpoints;
+using Magi.Api.Providers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -37,7 +38,7 @@ builder.Services
             ClockSkew = TimeSpan.FromMinutes(1),
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddMagiAdminPolicy(settings);
 
 // The browser never calls the backend directly (the SvelteKit server proxies every request),
 // so CORS stays closed unless explicit origins are configured.
@@ -64,11 +65,21 @@ builder.Services.AddHttpClient(GeminiCore.HttpClientName, c =>
     c.BaseAddress = new Uri(WithTrailingSlash(settings.Gemini.BaseUrl));
     c.Timeout = TimeSpan.FromSeconds(settings.CoreTimeoutSeconds + 30);
 });
+builder.Services.AddHttpClient(ModelLister.AnthropicHttpClientName, c =>
+    c.BaseAddress = new Uri(WithTrailingSlash(settings.Anthropic.BaseUrl)));
+
+// Provider settings editable at runtime from the settings page (DB overrides .env).
+builder.Services.AddSingleton<SecretProtector>();
+builder.Services.AddSingleton<ProviderConfigStore>();
+builder.Services.AddSingleton<ModelLister>();
+
 builder.Services.AddSingleton<IMagiCore, AnthropicCore>();
 builder.Services.AddSingleton<IMagiCore>(sp => new OpenAiCore(
-    sp.GetRequiredService<IHttpClientFactory>().CreateClient(OpenAiCore.HttpClientName), settings));
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient(OpenAiCore.HttpClientName),
+    sp.GetRequiredService<ProviderConfigStore>()));
 builder.Services.AddSingleton<IMagiCore>(sp => new GeminiCore(
-    sp.GetRequiredService<IHttpClientFactory>().CreateClient(GeminiCore.HttpClientName), settings));
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient(GeminiCore.HttpClientName),
+    sp.GetRequiredService<ProviderConfigStore>()));
 
 builder.Services.AddSingleton<DeliberationEventHub>();
 builder.Services.AddSingleton<DeliberationQueue>();
@@ -88,6 +99,7 @@ app.UseRateLimiter();
 app.MapSystemEndpoints();
 app.MapAuthEndpoints();
 app.MapDeliberationEndpoints();
+app.MapSettingsEndpoints();
 
 app.Run();
 
@@ -113,6 +125,7 @@ static async Task InitializeDatabaseAsync(WebApplication app)
     }
 
     await AdminSeeder.SeedAsync(db, app.Services.GetRequiredService<MagiSettings>(), logger);
+    await app.Services.GetRequiredService<ProviderConfigStore>().LoadAsync();
 }
 
 static string WithTrailingSlash(string url) => url.EndsWith('/') ? url : url + "/";

@@ -105,3 +105,22 @@ public enum Resolution
     /// <summary>Not enough valid votes to reach the threshold either way.</summary>
     Inconclusive,
 }
+
+/// <summary>
+/// Per-core provider overrides edited from the settings page. Any null column falls back to the
+/// matching environment variable, so the .env stays the baseline and the DB only overrides it.
+/// </summary>
+public sealed class ProviderSetting
+{
+    public CoreId Core { get; set; }
+
+    /// <summary>API key encrypted with <c>SecretProtector</c>; never stored or returned in clear.</summary>
+    public string? ApiKeyCipher { get; set; }
+
+    /// <summary>Last 4 characters of the key, shown in the UI to tell keys apart.</summary>
+    public string? ApiKeyHint { get; set; }
+
+    public string? Model { get; set; }
+    public string? Effort { get; set; }
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}

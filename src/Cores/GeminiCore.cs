@@ -1,24 +1,26 @@
 using System.Text.Json.Nodes;
-using Magi.Api.Configuration;
+using Magi.Api.Models;
+using Magi.Api.Providers;
 
 namespace Magi.Api.Cores;
 
 /// <summary>CASPER-3, backed by Google Gemini through generateContent with a JSON response schema.</summary>
-public sealed class GeminiCore(HttpClient http, MagiSettings settings) : IMagiCore
+public sealed class GeminiCore(HttpClient http, ProviderConfigStore store) : IMagiCore
 {
     public const string HttpClientName = "gemini";
-    private readonly ProviderSettings _settings = settings.Gemini;
 
     public CoreDefinition Definition => CoreDefinitions.Casper;
     public string Provider => "Google";
-    public string Model => _settings.Model;
-    public bool IsConfigured => _settings.IsConfigured;
+    public string Model => store.Get(CoreId.Casper).Settings.Model;
+    public bool IsConfigured => store.Get(CoreId.Casper).Settings.IsConfigured;
 
     public async Task<CoreAnswer> DeliberateAsync(CoreRequest request, CancellationToken ct)
     {
-        if (!IsConfigured)
+        // One snapshot per call, so a settings change mid-call cannot mix models or keys.
+        var provider = store.Get(CoreId.Casper).Settings;
+        if (!provider.IsConfigured)
         {
-            throw new CoreFailureException("GEMINI_API_KEY is not configured");
+            throw new CoreFailureException("Gemini API key is not configured");
         }
 
         var body = new JsonObject
@@ -37,16 +39,16 @@ public sealed class GeminiCore(HttpClient http, MagiSettings settings) : IMagiCo
                 ["responseMimeType"] = "application/json",
                 ["responseJsonSchema"] = CorePrompts.VoteSchema(),
                 ["maxOutputTokens"] = 16000,
-                ["thinkingConfig"] = new JsonObject { ["thinkingLevel"] = _settings.Effort },
+                ["thinkingConfig"] = new JsonObject { ["thinkingLevel"] = provider.Effort },
             },
         };
 
-        var path = $"v1beta/models/{Uri.EscapeDataString(_settings.Model)}:generateContent";
+        var path = $"v1beta/models/{Uri.EscapeDataString(provider.Model)}:generateContent";
         using var message = new HttpRequestMessage(HttpMethod.Post, path);
         // Key in a header rather than the query string, so it never ends up in URL logs.
-        message.Headers.Add("x-goog-api-key", _settings.ApiKey);
+        message.Headers.Add("x-goog-api-key", provider.ApiKey);
 
-        var json = await HttpCoreSupport.PostJsonAsync(http, message, body, Provider, Model, ct);
+        var json = await HttpCoreSupport.PostJsonAsync(http, message, body, Provider, provider.Model, ct);
 
         if (json["promptFeedback"]?["blockReason"]?.GetValue<string>() is { } blockReason)
         {

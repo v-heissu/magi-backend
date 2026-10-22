@@ -1,33 +1,35 @@
 using System.Text.Json.Nodes;
-using Magi.Api.Configuration;
+using Magi.Api.Models;
+using Magi.Api.Providers;
 
 namespace Magi.Api.Cores;
 
 /// <summary>BALTHASAR-2, backed by OpenAI through the Responses API with a strict JSON schema.</summary>
-public sealed class OpenAiCore(HttpClient http, MagiSettings settings) : IMagiCore
+public sealed class OpenAiCore(HttpClient http, ProviderConfigStore store) : IMagiCore
 {
     public const string HttpClientName = "openai";
-    private readonly ProviderSettings _settings = settings.OpenAi;
 
     public CoreDefinition Definition => CoreDefinitions.Balthasar;
     public string Provider => "OpenAI";
-    public string Model => _settings.Model;
-    public bool IsConfigured => _settings.IsConfigured;
+    public string Model => store.Get(CoreId.Balthasar).Settings.Model;
+    public bool IsConfigured => store.Get(CoreId.Balthasar).Settings.IsConfigured;
 
     public async Task<CoreAnswer> DeliberateAsync(CoreRequest request, CancellationToken ct)
     {
-        if (!IsConfigured)
+        // One snapshot per call, so a settings change mid-call cannot mix models or keys.
+        var provider = store.Get(CoreId.Balthasar).Settings;
+        if (!provider.IsConfigured)
         {
-            throw new CoreFailureException("OPENAI_API_KEY is not configured");
+            throw new CoreFailureException("OpenAI API key is not configured");
         }
 
         var body = new JsonObject
         {
-            ["model"] = _settings.Model,
+            ["model"] = provider.Model,
             ["instructions"] = CorePrompts.BuildSystemPrompt(Definition),
             ["input"] = CorePrompts.BuildUserPrompt(request),
             ["max_output_tokens"] = 16000,
-            ["reasoning"] = new JsonObject { ["effort"] = _settings.Effort },
+            ["reasoning"] = new JsonObject { ["effort"] = provider.Effort },
             ["text"] = new JsonObject
             {
                 ["format"] = new JsonObject
@@ -43,9 +45,9 @@ public sealed class OpenAiCore(HttpClient http, MagiSettings settings) : IMagiCo
         };
 
         using var message = new HttpRequestMessage(HttpMethod.Post, "v1/responses");
-        message.Headers.Authorization = new("Bearer", _settings.ApiKey);
+        message.Headers.Authorization = new("Bearer", provider.ApiKey);
 
-        var json = await HttpCoreSupport.PostJsonAsync(http, message, body, Provider, Model, ct);
+        var json = await HttpCoreSupport.PostJsonAsync(http, message, body, Provider, provider.Model, ct);
 
         if (json["status"]?.GetValue<string>() == "incomplete")
         {
