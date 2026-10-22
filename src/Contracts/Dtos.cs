@@ -54,6 +54,9 @@ public sealed record DeliberationDto(
     string? FailureReason,
     DateTime CreatedAt,
     DateTime? CompletedAt,
+    string? Summary,
+    string? SummaryModel,
+    string? SummaryError,
     IReadOnlyList<VoteDto> Votes);
 
 public sealed record DeliberationSummaryDto(
@@ -119,6 +122,9 @@ public static class DtoMapper
         d.FailureReason,
         Utc(d.CreatedAt),
         Utc(d.CompletedAt),
+        d.Summary,
+        d.SummaryModel,
+        d.SummaryError,
         d.Votes.OrderBy(v => v.Round).ThenBy(v => v.Core).Select(ToDto).ToList());
 
     public static DeliberationSummaryDto ToSummaryDto(this Deliberation d) => new(
@@ -156,3 +162,8 @@ public sealed record UpdateProviderRequest(string? Model, string? Effort, string
 public sealed record ModelOptionDto(string Id, string Label);
 
 public sealed record ModelListDto(IReadOnlyList<ModelOptionDto> Models, bool Live, string? Error);
+
+/// <summary>Either Ids (max 100) or OlderThanDays.</summary>
+public sealed record BulkDeleteRequest(List<Guid>? Ids, int? OlderThanDays);
+
+public sealed record BulkDeleteResponse(int Deleted);

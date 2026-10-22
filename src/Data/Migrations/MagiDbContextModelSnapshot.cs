@@ -144,6 +144,17 @@ namespace Magi.Api.src.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
 
+                    b.Property<string>("Summary")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SummaryError")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("SummaryModel")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("char(36)");
 

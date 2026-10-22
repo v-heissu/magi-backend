@@ -25,6 +25,9 @@ public sealed class MagiDbContext(DbContextOptions<MagiDbContext> options) : DbC
             e.Property(d => d.Proposition).HasMaxLength(2000);
             e.Property(d => d.Context).HasColumnType("text");
             e.Property(d => d.FailureReason).HasMaxLength(1000);
+            e.Property(d => d.Summary).HasColumnType("text");
+            e.Property(d => d.SummaryModel).HasMaxLength(100);
+            e.Property(d => d.SummaryError).HasMaxLength(500);
             // Enums as strings: readable in the DB and safe against reordering.
             e.Property(d => d.Mode).HasConversion<string>().HasMaxLength(20);
             e.Property(d => d.Status).HasConversion<string>().HasMaxLength(20);

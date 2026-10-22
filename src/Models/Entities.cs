@@ -31,6 +31,11 @@ public sealed class Deliberation
     public int RejectCount { get; set; }
     public string? FailureReason { get; set; }
 
+    /// <summary>Plain-text recap of the debate, written by a low-cost model after the vote.</summary>
+    public string? Summary { get; set; }
+    public string? SummaryModel { get; set; }
+    public string? SummaryError { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
 

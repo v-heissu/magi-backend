@@ -19,6 +19,7 @@ public sealed class DeliberationEngine(
     IServiceScopeFactory scopeFactory,
     IEnumerable<IMagiCore> cores,
     DeliberationEventHub hub,
+    DebateSummarizer summarizer,
     MagiSettings settings,
     ILogger<DeliberationEngine> logger)
 {
@@ -94,6 +95,19 @@ public sealed class DeliberationEngine(
 
             await db.SaveChangesAsync(ct);
             await PublishFinalAsync(db, deliberation, ct);
+
+            if (deliberation.Status == DeliberationStatus.Completed)
+            {
+                // The stream stays open until the recap arrives, so the page can show it live.
+                hub.Publish(deliberationId, new MagiEvent("summary_started", new { }));
+                await WriteSummaryAsync(db, deliberation, ct);
+                hub.Publish(deliberationId, new MagiEvent("summary_ready", new
+                {
+                    summary = deliberation.Summary,
+                    summaryModel = deliberation.SummaryModel,
+                    summaryError = deliberation.SummaryError,
+                }));
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -203,6 +217,37 @@ public sealed class DeliberationEngine(
         vote.LatencyMs = (int)stopwatch.ElapsedMilliseconds;
         hub.Publish(deliberationId, new MagiEvent("core_voted", vote.ToDto()));
         return vote;
+    }
+
+    /// <summary>Generates and stores the debate recap. Never throws (except on shutdown): a failed recap is recorded.</summary>
+    public async Task WriteSummaryAsync(MagiDbContext db, Deliberation deliberation, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(Math.Min(settings.CoreTimeoutSeconds, 120)));
+
+        try
+        {
+            var summary = await summarizer.SummarizeAsync(deliberation, timeout.Token);
+            deliberation.Summary = summary.Text;
+            deliberation.SummaryModel = summary.Model;
+            deliberation.SummaryError = null;
+        }
+        catch (CoreFailureException ex)
+        {
+            logger.LogWarning(ex, "Recap of deliberation {Id} failed: {Message}", deliberation.Id, ex.Message);
+            deliberation.SummaryError = ex.Message.Length <= 500 ? ex.Message : ex.Message[..500];
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            deliberation.SummaryError = "The recap model did not answer in time";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Recap of deliberation {Id} crashed", deliberation.Id);
+            deliberation.SummaryError = "Internal error while writing the recap";
+        }
+
+        await db.SaveChangesAsync(CancellationToken.None);
     }
 
     private async Task PublishFinalAsync(MagiDbContext db, Deliberation deliberation, CancellationToken ct)

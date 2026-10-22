@@ -22,6 +22,9 @@ public static class DeliberationEndpoints
         group.MapGet("/", ListAsync);
         group.MapGet("/{id:guid}", GetAsync);
         group.MapDelete("/{id:guid}", DeleteAsync);
+        group.MapPost("/bulk-delete", BulkDeleteAsync);
+        // Uses a paid model call: shares the deliberation rate limit.
+        group.MapPost("/{id:guid}/summary", RegenerateSummaryAsync).RequireRateLimiting(RateLimitPolicies.Deliberations);
         group.MapGet("/{id:guid}/events", StreamAsync);
     }
 
@@ -125,6 +128,71 @@ public static class DeliberationEndpoints
         db.Deliberations.Remove(deliberation);
         await db.SaveChangesAsync();
         return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Deletes several finished deliberations at once: the given ids, or everything older than N days.
+    /// Deliberations still running are always skipped.
+    /// </summary>
+    private static async Task<IResult> BulkDeleteAsync(BulkDeleteRequest body, HttpContext http, MagiDbContext db)
+    {
+        var ids = body.Ids ?? [];
+        var byIds = ids.Count > 0;
+        if (byIds == body.OlderThanDays.HasValue)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["ids"] = ["Pass either ids or olderThanDays"],
+            });
+        }
+
+        if (ids.Count > 100 || body.OlderThanDays is < 1 or > 3650)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["ids"] = ["At most 100 ids; olderThanDays between 1 and 3650"],
+            });
+        }
+
+        var query = db.Deliberations.Where(d =>
+            d.UserId == http.User.UserId()
+            && d.Status != DeliberationStatus.Pending
+            && d.Status != DeliberationStatus.Running);
+
+        if (body.OlderThanDays is { } days)
+        {
+            var cutoff = DateTime.UtcNow.AddDays(-days);
+            query = query.Where(d => d.CreatedAt < cutoff);
+        }
+        else
+        {
+            query = query.Where(d => ids.Contains(d.Id));
+        }
+
+        // Votes go with their deliberation through the FK's ON DELETE CASCADE.
+        var deleted = await query.ExecuteDeleteAsync();
+        return Results.Ok(new BulkDeleteResponse(deleted));
+    }
+
+    /// <summary>(Re)writes the debate recap, e.g. for deliberations made before the feature or after a failure.</summary>
+    private static async Task<IResult> RegenerateSummaryAsync(
+        Guid id, HttpContext http, MagiDbContext db, DeliberationEngine engine, CancellationToken ct)
+    {
+        var deliberation = await db.Deliberations
+            .Include(d => d.Votes)
+            .FirstOrDefaultAsync(d => d.Id == id && d.UserId == http.User.UserId(), ct);
+        if (deliberation is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (deliberation.Status != DeliberationStatus.Completed)
+        {
+            return Results.Conflict(new { error = "Only completed deliberations have a recap" });
+        }
+
+        await engine.WriteSummaryAsync(db, deliberation, ct);
+        return Results.Ok(deliberation.ToDto());
     }
 
     /// <summary>

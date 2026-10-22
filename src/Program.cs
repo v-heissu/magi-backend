@@ -83,6 +83,7 @@ builder.Services.AddSingleton<IMagiCore>(sp => new GeminiCore(
 
 builder.Services.AddSingleton<DeliberationEventHub>();
 builder.Services.AddSingleton<DeliberationQueue>();
+builder.Services.AddSingleton<DebateSummarizer>();
 builder.Services.AddSingleton<DeliberationEngine>();
 builder.Services.AddHostedService<DeliberationWorker>();
 
